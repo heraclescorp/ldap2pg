@@ -211,10 +211,10 @@ class Role(object):
                 queries.append("""REVOKE "%(me)s" FROM "%(role)s";""")
                 self.parents.remove(me)
 
-            if me not in self.members:
-                # Inherit from target role to reassign even if non-superuser.
-                queries.append("""GRANT "%(role)s" TO %(me)s;""")
-                self.members.append(me)
+            # if me not in self.members:
+            #     # Inherit from target role to reassign even if non-superuser.
+            #     queries.append("""GRANT "%(role)s" TO %(me)s;""")
+            #     self.members.append(me)
 
             queries.append("""REASSIGN OWNED BY "%(role)s" TO "%(owner)s";""")
             queries.append("""DROP OWNED BY "%(role)s";""")
