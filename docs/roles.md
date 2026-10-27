@@ -17,6 +17,36 @@ file.
 [role]: config.md#sync-map-role
 
 
+## Non-superuser cleanup
+
+Before removing a managed role, ldap2pg ensures that its connecting role can
+inherit the departing role and the destination database owners. `ADMIN OPTION`
+allows role administration but does not provide the ownership privileges needed
+by `REASSIGN OWNED` or `DROP OWNED`.
+
+On PostgreSQL 16 and later, cleanup explicitly grants `INHERIT TRUE` and `SET TRUE`
+when the required privileges are missing. Existing usable memberships are left
+alone. `SET` is required on a fallback owner when database ownership changes.
+Older PostgreSQL versions use ordinary membership grants.
+
+The connecting role needs `CREATEROLE` and, on PostgreSQL 16 and later,
+`ADMIN OPTION` on roles it removes. It must also be authorized to grant any
+missing owner memberships. Reassigning a database additionally requires
+`CREATEDB`. A native superuser needs none of these membership grants.
+
+Destination-owner memberships persist between runs; departing-role memberships
+disappear when the role is dropped. Destination owners can be blacklisted from
+role management without blocking the memberships required for cleanup.
+No memberships are changed in dry-run mode.
+
+The database regression suite requires an isolated cluster and a test account
+allowed to create databases and roles:
+
+``` console
+LDAP2PG_TEST_DSN='host=localhost user=postgres dbname=postgres' python -m pytest tests/postgres/
+```
+
+
 ## Ignoring roles
 
 ldap2pg totally ignores roles matching one of the glob pattern defined in
@@ -28,8 +58,8 @@ postgres:
   blacklist: [postgres, pg_*]
 ```
 
-The role blacklist is also applied to grants. ldap2pg will never apply `GRANT`
-or `REVOKE` on a role matching one of the blacklist patterns.
+The role blacklist also excludes configured privilege grants and revocations.
+Cleanup may still inherit a blacklisted database owner as described above.
 
 [roles_blacklist_query]: config.md#postgres-roles-blacklist-query
 

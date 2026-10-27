@@ -314,7 +314,9 @@ class SyncManager(object):
                 pgmanagedroles.diff(
                     other=ldaproles, available=pgallroles,
                     # For reassign:
-                    me=me, databases=databases, fallback_owner=fallback_owner,
+                    me=None if issuper else me, databases=databases,
+                    fallback_owner=fallback_owner,
+                    server_version=self.pool.getconn().server_version,
                 ),
                 databases=databases),
             dry=self.dry,

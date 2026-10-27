@@ -4,7 +4,7 @@ from collections import OrderedDict
 import logging
 
 from .format import collect_fields, AttributesMap, FormatList
-from .psql import Query
+from .psql import GrantRoleQuery, Query
 from .utils import dedent, unicode
 
 
@@ -193,7 +193,22 @@ class Role(object):
                 )
             )
 
-    def drop(self, databases=None, me=None):
+    def grant_membership(self, member, server_version=0, require_set=False):
+        if member == self.name:
+            return
+        role_name = self.name.replace('"', '""')
+        member_name = member.replace('"', '""')
+        if member in self.parents:
+            # Break the membership loop before inheriting the departing role.
+            yield Query(
+                'Remove %s from %s before cleanup.' % (member, self.name),
+                None,
+                'REVOKE "%s" FROM "%s";' % (member_name, role_name),
+            )
+            self.parents.remove(member)
+        yield GrantRoleQuery(self.name, member, server_version, require_set)
+
+    def drop(self, databases=None):
         yield Query(
             'Terminate running sessions for %s.' % self.name,
             None, dedent("""\
@@ -204,18 +219,8 @@ class Role(object):
         )
         databases = databases or []
         for db in databases:
-            fmtkw = dict(owner=db.owner, role=self.name, me=me)
+            fmtkw = dict(owner=db.owner, role=self.name)
             queries = []
-            if me in self.parents:
-                # Break membership loop before granting.
-                queries.append("""REVOKE "%(me)s" FROM "%(role)s";""")
-                self.parents.remove(me)
-
-            # if me not in self.members:
-            #     # Inherit from target role to reassign even if non-superuser.
-            #     queries.append("""GRANT "%(role)s" TO %(me)s;""")
-            #     self.members.append(me)
-
             queries.append("""REASSIGN OWNED BY "%(role)s" TO "%(owner)s";""")
             queries.append("""DROP OWNED BY "%(role)s";""")
 
@@ -402,7 +407,7 @@ class RoleSet(set):
 
     def diff(
             self, other=None, available=None, fallback_owner=None,
-            databases=None, me=None):
+            databases=None, me=None, server_version=0):
         # Yield query so that self match other. It's kind of a three-way diff
         # since we reuse `available` roles instead of recreating roles.
 
@@ -516,6 +521,21 @@ class RoleSet(set):
             for qry in mine.alter(its):
                 yield qry
 
+        if me and spurious:
+            for role in spurious:
+                for query in role.grant_membership(me, server_version):
+                    yield query
+            owners = set(
+                fallback_owner if db.owner in spurious else db.owner
+                for db in databases or []
+            )
+            for owner in sorted(owners):
+                require_set = owner == fallback_owner and any(
+                    db.owner in spurious for db in databases or [])
+                for query in Role(owner).grant_membership(
+                        me, server_version, require_set):
+                    yield query
+
         # Don't forget to trash all spurious managed roles!
         # reassign databases to fallback_owner
         for database in databases or []:
@@ -526,7 +546,7 @@ class RoleSet(set):
                 database.owner = fallback_owner
 
         for role in reversed(list(spurious.flatten())):
-            for qry in role.drop(databases or [], me):
+            for qry in role.drop(databases or []):
                 yield qry
 
 

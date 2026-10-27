@@ -215,6 +215,37 @@ class Query(object):
         else:
             yield self
 
+    def should_execute(self, conn):
+        return True
+
+
+class GrantRoleQuery(Query):
+    def __init__(self, role, member, server_version=0, require_set=False):
+        self.role = role
+        self.member = member
+        self.require_set = require_set
+        self.server_version = server_version
+        options = ''
+        if server_version >= 160000:
+            options = ' WITH INHERIT TRUE, SET TRUE'
+        super(GrantRoleQuery, self).__init__(
+            'Allow %s to inherit %s for cleanup.' % (member, role),
+            None,
+            'GRANT "%s" TO "%s"%s;' % (
+                role.replace('"', '""'), member.replace('"', '""'), options),
+        )
+
+    def should_execute(self, conn):
+        sql = (
+            'SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_roles '
+            "WHERE rolname = %s AND pg_has_role(%s, oid, 'USAGE')")
+        args = [self.role, self.member]
+        if self.require_set:
+            privilege = 'SET' if self.server_version >= 160000 else 'MEMBER'
+            sql += ' AND pg_has_role(%s, oid, %s)'
+            args.extend([self.member, privilege])
+        return not conn.scalar(conn.mogrify(sql + ')', args))
+
 
 def expand_queries(queries, databases):
     for query in queries:
@@ -226,6 +257,8 @@ def execute_queries(pool, queries, timer, dry=False):
     count = 0
     for query in queries:
         conn = pool.getconn(query.dbname)
+        if not query.should_execute(conn):
+            continue
         count += 1
         if dry:
             logger.change('Would ' + lower1(query.message))

@@ -9,6 +9,11 @@ workflows:
         matrix:
           parameters:
             python: ["3.6", "2.7"]
+    - cleanup:
+        name: "stage0-cleanup-pg<< matrix.pgversion >>"
+        matrix:
+          parameters:
+            pgversion: ["12", "18"]
     - rpm:
         name: "stage0-pkg-<< matrix.dist >>"
         matrix:
@@ -42,6 +47,31 @@ workflows:
 
 
 jobs:
+  cleanup:
+    parameters:
+      pgversion:
+        type: string
+    working_directory: /home/circleci/project
+    docker:
+      - image: cimg/python:3.11
+      - image: postgres:<< parameters.pgversion >>-alpine
+        environment:
+          POSTGRES_PASSWORD: communication
+    environment:
+      LDAP2PG_TEST_DSN: "host=localhost user=postgres password=communication dbname=postgres"
+    steps:
+    - checkout
+    - run:
+        name: Install cleanup test dependencies
+        command: |
+          sudo apt-get update
+          sudo apt-get install -y libldap2-dev libsasl2-dev
+          python -m pip install pytest psycopg2-binary python-ldap pyyaml
+          python -m pip install --no-deps .
+    - run:
+        name: Verify non-superuser cleanup and preserved ownership
+        command: python -m pytest -q tests/postgres/
+
   func:
     parameters:
       dist:

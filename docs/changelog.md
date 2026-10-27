@@ -11,9 +11,13 @@ Here is a highlight of changes in each versions. If you need further details,
 follow [merged Pull request
 pages](https://github.com/dalibo/ldap2pg/pulls?utf8=%E2%9C%93&q=is%3Apr%20is%3Amerged).
 
-# Unreleased
+# ldap2pg 5.10a2
 
 - Add support for config in roles.
+- Prepare inherited source-role and database-owner privileges before cleanup.
+- Handle PostgreSQL 16+ memberships with `INHERIT FALSE` and `SET FALSE`.
+- Preserve existing usable owner memberships without requiring grant authority.
+- Exercise real cleanup, preserved data, and future departures on PostgreSQL 12 and 18.
 
 # ldap2pg 5.9
 
