@@ -174,9 +174,10 @@ Privileges] for details.
 
 [roles_blacklist_query]: #postgres-roles-blacklist-query
 
-The SQL query returning name and glob pattern to blacklist role from
-management. ldap2pg won't touch anything on these roles. Default value is
-`[postgres, pg_*]`.
+The SQL query returning names and glob patterns to exclude from role and
+configured privilege management. Default value is `[postgres, pg_*]`.
+Cleanup can still grant the connecting role membership in a blacklisted
+database owner when required to reassign a departing role's objects.
 
 ``` yaml
 postgres:
